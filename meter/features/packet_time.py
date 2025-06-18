@@ -23,7 +23,7 @@ class PacketTime:
         if self.packet_times is not None:
             return self.packet_times
         first_packet_time = self.flow.packets[0][0].time
-        packet_times = [packet.time - first_packet_time for packet, _ in self.flow.packets]
+        packet_times = [float(packet.time - first_packet_time) for packet, _ in self.flow.packets]
         return packet_times
 
     def relative_time_list(self):
@@ -49,7 +49,7 @@ class PacketTime:
 
         """
         time = self.flow.packets[0][0].time
-        date_time = datetime.fromtimestamp(time).strftime('%Y-%m-%d %H:%M:%S')
+        date_time = datetime.fromtimestamp(float(time)).strftime('%Y-%m-%d %H:%M:%S')
         return date_time
 
     def get_duration(self):

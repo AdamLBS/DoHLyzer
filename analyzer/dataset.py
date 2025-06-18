@@ -13,8 +13,11 @@ import analyzer.utils as utils
 
 def create_segments(clumps_list, segment_size):
     clumps_list2 = []
-    # Inter-arrival, Duration, Size, Packets, Direction
     for c in clumps_list:
+        # détection et dépliage si le vecteur est mal imbriqué
+        if isinstance(c[0], list):
+            c = c[0]
+
         c2 = [
             utils.normalize(math.log10(max(1e-12, c[0])), data_min=-12, data_max=-2),
             utils.normalize(math.log10(max(1e-12, c[1])), data_min=-12, data_max=-2),
@@ -28,6 +31,7 @@ def create_segments(clumps_list, segment_size):
         clumps_list2.append([-1, -1, -1, -1, 0])
 
     return utils.nwise(clumps_list2, segment_size)
+
 
 
 def load_json(path, label, segment_size, shuffle=True, max_count=0):
@@ -45,9 +49,14 @@ def load_json(path, label, segment_size, shuffle=True, max_count=0):
     for flow in items:
         if 0 < max_count < len(segments):
             break
-        segments.extend(create_segments(flow, segment_size))
 
-    logging.info('Loading {} ...'.format(path))
+        feature_vectors = flow["features"] if isinstance(flow, dict) and "features" in flow else flow
+        segs = create_segments(feature_vectors, segment_size)
+        segments.extend(segs)
+
+    if not segments:
+        logging.warning(f"⚠️ No segments found in {path}")
+        return numpy.empty((0, segment_size, 5)), numpy.empty((0,), dtype=int)
 
     if shuffle:
         numpy.random.shuffle(segments)

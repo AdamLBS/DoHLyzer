@@ -1,0 +1,6 @@
+Collecting numpy~=1.18
+  Using cached numpy-1.26.4-cp311-cp311-win_amd64.whl (15.8 MB)
+Collecting scipy~=1.4.1
+  Using cached scipy-1.4.1.tar.gz (24.6 MB)
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'error'

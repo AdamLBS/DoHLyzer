@@ -13,23 +13,20 @@ class ResponseTime:
         self.feature = feature
 
     def get_dif(self) -> list:
-        """Calculates the time difference in seconds between\
-           an outgoing packet and the following response packet.
-
+        """Calculates the time difference in seconds between
+        an outgoing packet and the following response packet.
         Returns:
             List[float]: A list of time differences.
-
         """
         time_diff = []
         temp_packet = None
         temp_direction = None
         for packet, direction in self.feature.packets:
             if temp_direction == PacketDirection.FORWARD and direction == PacketDirection.REVERSE:
-                time_diff.append(packet.time - temp_packet.time)
+                time_diff.append(float(packet.time - temp_packet.time))  # Convertir ici
             temp_packet = packet
             temp_direction = direction
         return time_diff
-
     def get_var(self) -> float:
         """Calculates the variation of the list of time differences.
 
