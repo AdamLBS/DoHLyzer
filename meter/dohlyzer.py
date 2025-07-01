@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import argparse
+import os
 
 from scapy.all import load_layer
 from scapy.sendrecv import AsyncSniffer
@@ -11,7 +12,9 @@ from meter.flow_session import generate_session_class
 def create_sniffer(input_file, input_interface, output_mode, output_file):
     assert (input_file is None) ^ (input_interface is None)
 
-    NewFlowSession = generate_session_class(output_mode, output_file)
+    pcap_path = input_file if input_file is not None else None
+    NewFlowSession = generate_session_class(output_mode, output_file, pcap_file=pcap_path)
+
 
     if input_file is not None:
         return AsyncSniffer(offline=input_file, filter='tcp port 443', prn=None, session=NewFlowSession, store=False)
@@ -40,7 +43,15 @@ def main():
 
     load_layer('tls')
 
-    sniffer = create_sniffer(args.input_file, args.input_interface, args.output_mode, args.output)
+    session_class = generate_session_class(
+        args.output_mode, args.output, pcap_file=args.input_file
+    )
+    sniffer = AsyncSniffer(
+        offline=args.input_file,
+        iface=args.input_interface,
+        session=session_class
+    )
+
     sniffer.start()
 
     try:

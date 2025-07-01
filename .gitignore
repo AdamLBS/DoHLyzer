@@ -10,3 +10,6 @@ venv/
 .idea
 .venv/
 output/
+confusion_matrices/
+output2/
+*.json
