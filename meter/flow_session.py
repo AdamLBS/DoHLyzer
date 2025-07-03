@@ -27,6 +27,7 @@ class FlowSession(DefaultSession):
         self.packets_count = 0
 
         self.clumped_flows_per_label = defaultdict(list)
+        self.pcap_file = kwargs.get('pcap_file', 'unknown')
 
         super(FlowSession, self).__init__(*args, **kwargs)
 
@@ -67,7 +68,7 @@ class FlowSession(DefaultSession):
             if flow is None:
                 # If no flow exists create a new flow
                 direction = PacketDirection.FORWARD
-                flow = Flow(packet, direction)
+                flow = Flow(packet, direction, self.pcap_file)
                 packet_flow_key = get_packet_flow_key(packet, direction)
                 self.flows[(packet_flow_key, count)] = flow
 
@@ -81,7 +82,7 @@ class FlowSession(DefaultSession):
                     flow = self.flows.get((packet_flow_key, count))
 
                     if flow is None:
-                        flow = Flow(packet, direction)
+                        flow = Flow(packet, direction, self.pcap_file)
                         self.flows[(packet_flow_key, count)] = flow
                         break
 
@@ -94,7 +95,7 @@ class FlowSession(DefaultSession):
                 flow = self.flows.get((packet_flow_key, count))
 
                 if flow is None:
-                    flow = Flow(packet, direction)
+                    flow = Flow(packet, direction, self.pcap_file)
                     self.flows[(packet_flow_key, count)] = flow
                     break
 
@@ -133,8 +134,12 @@ class FlowSession(DefaultSession):
         print('Garbage Collection Finished. Flows = {}'.format(len(self.flows)))
 
 
-def generate_session_class(output_mode, output_file):
-    return type('NewFlowSession', (FlowSession,), {
-        'output_mode': output_mode,
-        'output_file': output_file,
-    })
+def generate_session_class(output_mode, output_file, pcap_file=None):
+    class NewFlowSession(FlowSession):
+        def __init__(self, *args, **kwargs):
+            kwargs['pcap_file'] = pcap_file
+            super().__init__(*args, **kwargs)
+
+    NewFlowSession.output_mode = output_mode
+    NewFlowSession.output_file = output_file
+    return NewFlowSession

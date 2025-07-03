@@ -12,7 +12,7 @@ from meter.features.response_time import ResponseTime
 class Flow:
     """This class summarizes the values of the features of the network flows"""
 
-    def __init__(self, packet: Any, direction: Enum):
+    def __init__(self, packet: Any, direction: Enum, pcap_file=None):
         """This method initializes an object from the Flow class.
 
         Args:
@@ -26,6 +26,7 @@ class Flow:
         self.packets = []
         self.latest_timestamp = 0
         self.start_timestamp = 0
+        self.pcap_file = pcap_file
 
     def get_data(self) -> dict:
         """This method obtains the values of the features extracted from each flow.

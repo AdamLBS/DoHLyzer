@@ -10,7 +10,7 @@ import analyzer.dataset as dataset
 from analyzer.models import create_model
 
 
-def run_model(version, segment_size):
+def run_model(version, segment_size, x_train, x_test, y_train, y_test, test_indices, test_trace):
     model = create_model(version, segment_size)
 
     print(model.summary())
@@ -22,6 +22,20 @@ def run_model(version, segment_size):
 
     y_pred = model.predict(x_test, verbose=1)
     y_pred_bool = list(map(lambda y: 1 if y > 0.5 else 0, y_pred))
+    misclassified = []
+    for i, (true, pred) in enumerate(zip(y_test, y_pred_bool)):
+        if true != pred:
+            file, local_idx = test_trace[i]
+            misclassified.append({
+                "index": int(test_indices[i]),
+                "true_label": int(true),
+                "predicted_label": int(pred),
+                "source_file": file,
+                "local_index": int(local_idx)
+            })
+
+    with open(f"misclassified_model{version}_seg{segment_size}.json", "w") as f:
+        json.dump(misclassified, f, indent=2)
 
     return (
         classification_report(y_test, y_pred_bool, digits=5, output_dict=True),
@@ -46,11 +60,16 @@ if __name__ == '__main__':
 
     for segment_size in range(4, 11):
 
-        x_train, x_test, y_train, y_test = dataset.load_dataset(args.input, segment_size, use_cache=False)
+        x_train, x_test, y_train, y_test, test_indices, test_trace = dataset.load_dataset(args.input, segment_size, use_cache=False)
 
         for model_idx in range(1, 5):
             for _ in range(3):
-                results.append((run_model(model_idx, segment_size), model_idx, segment_size))
+                results.append((
+                    run_model(model_idx, segment_size, x_train, x_test, y_train, y_test, test_indices, test_trace),
+                    model_idx,
+                    segment_size
+                ))
+
 
     output = open(args.output, 'w')
 

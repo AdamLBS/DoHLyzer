@@ -34,7 +34,7 @@ def create_segments(clumps_list, segment_size):
 
 
 
-def load_json(path, label, segment_size, shuffle=True, max_count=0):
+def load_json(path, label, segment_size, shuffle=True, max_count=0, trace_list=None):
     logging.info('Loading {} .'.format(path))
     if path.endswith('gz'):
         json_file = gzip.open(path, 'r')
@@ -52,7 +52,11 @@ def load_json(path, label, segment_size, shuffle=True, max_count=0):
 
         feature_vectors = flow["features"] if isinstance(flow, dict) and "features" in flow else flow
         segs = create_segments(feature_vectors, segment_size)
-        segments.extend(segs)
+        for i, seg in enumerate(segs):
+            segments.append(seg)
+            if trace_list is not None:
+                trace_list.append((os.path.basename(path), len(segments)-1))
+
 
     if not segments:
         logging.warning(f"⚠️ No segments found in {path}")
@@ -70,16 +74,27 @@ def load_dataset(dir_path, segment_size, use_cache=True):
         print('Using cached version')
         return pickle.load(open(cache_path, 'rb'))
 
-    doh_dataset = load_json(os.path.join(dir_path, 'doh.json.gz'), 1, segment_size)
-    ndoh_dataset = load_json(os.path.join(dir_path, 'ndoh.json.gz'), 0, segment_size, max_count=len(doh_dataset[0]))
+    trace_list = []
+
+    doh_dataset = load_json(os.path.join(dir_path, 'doh.json.gz'), 1, segment_size, trace_list=trace_list)
+    ndoh_dataset = load_json(os.path.join(dir_path, 'ndoh.json.gz'), 0, segment_size, max_count=len(doh_dataset[0]), trace_list=trace_list)
 
     logging.info('Combining datasets')
     main_dataset = utils.combine(doh_dataset, ndoh_dataset)
 
     logging.info('Splitting test/train')
-    dataset_tuple = train_test_split(*main_dataset)
+    X, y = main_dataset
+    indices = numpy.arange(len(X))
+
+    X_train, X_test, y_train, y_test, idx_train, idx_test = train_test_split(
+        X, y, indices, test_size=0.2, stratify=y, random_state=42
+    )
+    test_trace = [trace_list[i] for i in idx_test]
+
+    dataset_tuple = (X_train, X_test, y_train, y_test, idx_test)
 
     if use_cache:
-        pickle.dump(dataset_tuple, open(cache_path, 'wb'))
+        pickle.dump((X_train, X_test, y_train, y_test, idx_test, test_trace), open(cache_path, 'wb'))
 
-    return dataset_tuple
+    return X_train, X_test, y_train, y_test, idx_test, test_trace
+

@@ -64,8 +64,10 @@ class FlowClumpsContainer:
         return results, count
 
     def to_json_file(self, directory):
-        preferred_name = '{}_{}-{}_{}.json'.format(self.flow.src_ip, self.flow.src_port,
-                                                   self.flow.dest_ip, self.flow.dest_port)
+        preferred_name = '{}_{}-{}_{}.json'.format(
+            self.flow.src_ip, self.flow.src_port,
+            self.flow.dest_ip, self.flow.dest_port
+        )
         file_path = os.path.join(directory, preferred_name)
 
         output, count = self.output()
@@ -73,15 +75,28 @@ class FlowClumpsContainer:
         if count < 5:
             return
 
+        flow_meta = {
+            "src_ip": self.flow.src_ip,
+            "src_port": int(self.flow.src_port),
+            "dst_ip": self.flow.dest_ip,
+            "dst_port": int(self.flow.dest_port),
+            "start_ts": float(self.flow.start_timestamp),
+            "pcap_file": self.flow.pcap_file or "unknown"
+        }
+
+        new_entry = {
+            "features": output,
+            "meta": flow_meta
+        }
+
         if os.path.exists(file_path):
-            f = open(file_path, 'r')
-            contents = json.load(f)
-            contents.append(output)
-            f.close()
+            with open(file_path, 'r') as f:
+                contents = json.load(f)
         else:
-            contents = [output]
+            contents = []
 
-        f = open(file_path, 'w')
+        contents.append(new_entry)
 
-        json.dump(contents, f, indent=2)
-        f.close()
+        with open(file_path, 'w') as f:
+            json.dump(contents, f, indent=2)
+
