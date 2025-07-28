@@ -19,12 +19,21 @@ def analyze_dohlyzer_json(filepath):
     if not data:
         return {"filename": os.path.basename(filepath), "error": "Empty file or invalid format"}
 
-    session = data[0]
-    features = session.get("features", [])
-    meta = session.get("meta", {})
+    # Handle different JSON formats (dict or list of lists)
+    if isinstance(data[0], dict) and "features" in data[0]:
+        session = data[0]
+        features = session.get("features", [])
+        meta = session.get("meta", {})
+        src_ip = meta.get("src_ip", "unknown")
+        dst_ip = meta.get("dst_ip", "unknown")
 
-    src_ip = meta.get("src_ip", "unknown")
-    dst_ip = meta.get("dst_ip", "unknown")
+    elif isinstance(data[0], list) and isinstance(data[0][0], list):
+        features = data[0]
+        src_ip = "unknown"
+        dst_ip = "unknown"
+    
+    else:
+        return {"filename": os.path.basename(filepath), "error": "Unsupported file format"}
 
     total_packets = len(features)
     total_bytes = sum(f[2] for f in features)

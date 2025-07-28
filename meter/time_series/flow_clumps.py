@@ -6,6 +6,11 @@ from scapy.layers.tls.record import TLSApplicationData
 from meter import constants
 from meter.features.context.packet_direction import PacketDirection
 
+MALICIOUS_SOURCE_IPS = {
+    "192.168.20.144", "192.168.20.204", "192.168.20.205", "192.168.20.206",
+    "192.168.20.207", "192.168.20.208", "192.168.20.209", "192.168.20.210",
+    "192.168.20.211", "192.168.20.212"
+}
 
 class Clump:
     """Represents several packets with the same direction with short time between them"""
@@ -81,7 +86,8 @@ class FlowClumpsContainer:
             "dst_ip": self.flow.dest_ip,
             "dst_port": int(self.flow.dest_port),
             "start_ts": float(self.flow.start_timestamp),
-            "pcap_file": self.flow.pcap_file or "unknown"
+            "pcap_file": self.flow.pcap_file or "unknown",
+            "malicious": self.flow.src_ip in MALICIOUS_SOURCE_IPS
         }
 
         new_entry = {
