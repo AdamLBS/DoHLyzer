@@ -17,9 +17,9 @@ def create_sniffer(input_file, input_interface, output_mode, output_file):
 
 
     if input_file is not None:
-        return AsyncSniffer(offline=input_file, filter='tcp port 443', prn=None, session=NewFlowSession, store=False)
+        return AsyncSniffer(offline=input_file, filter='ip and tcp port 443', prn=None, session=NewFlowSession, store=False)
     else:
-        return AsyncSniffer(iface=input_interface, filter='tcp port 443', prn=None,
+        return AsyncSniffer(iface=input_interface, filter='ip and tcp port 443', prn=None,
                             session=NewFlowSession, store=False)
 
 
@@ -49,7 +49,8 @@ def main():
     sniffer = AsyncSniffer(
         offline=args.input_file,
         iface=args.input_interface,
-        session=session_class
+        session=session_class,
+        filter='ip and tcp port 443'
     )
 
     sniffer.start()
