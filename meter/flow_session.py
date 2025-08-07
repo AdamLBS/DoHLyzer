@@ -100,7 +100,7 @@ class FlowSession(DefaultSession):
 
         flow.add_packet(packet, direction)
 
-        if self.packets_count % 10000 == 0 or (flow.duration > 120 and self.output_mode == 'flow'):
+        if self.packets_count >= 4000 or (flow.duration > 120 and self.output_mode == 'flow'):
             print('Packet count: {}'.format(self.packets_count))
             self.garbage_collect(packet.time)
 
@@ -115,7 +115,7 @@ class FlowSession(DefaultSession):
             flow = self.flows.get(k)
 
             if self.output_mode == 'flow':
-                if latest_time is None or latest_time - flow.latest_timestamp > EXPIRED_UPDATE or flow.duration > 90:
+                if latest_time is None or latest_time - flow.latest_timestamp > EXPIRED_UPDATE or flow.duration > 20:
                     data = flow.get_data()
                     if self.csv_line == 0:
                         self.csv_writer.writerow(data.keys())
