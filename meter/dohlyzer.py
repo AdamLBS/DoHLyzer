@@ -12,8 +12,7 @@ from meter.flow_session import generate_session_class
 def create_sniffer(input_file, input_interface, output_mode, output_file):
     assert (input_file is None) ^ (input_interface is None)
 
-    pcap_path = input_file if input_file is not None else None
-    NewFlowSession = generate_session_class(output_mode, output_file, pcap_file=pcap_path)
+    NewFlowSession = generate_session_class(output_mode, output_file)
 
 
     if input_file is not None:
@@ -44,7 +43,7 @@ def main():
     load_layer('tls')
 
     session_class = generate_session_class(
-        args.output_mode, args.output, pcap_file=args.input_file
+        args.output_mode, args.output
     )
     sniffer = AsyncSniffer(
         offline=args.input_file,
