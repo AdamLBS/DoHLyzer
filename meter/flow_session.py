@@ -153,7 +153,7 @@ class FlowSession(DefaultSession):
         condition1 = self.packets_count % 50 == 0        # Tous les 50 paquets (vs 10000)
         condition2 = flow.duration > 2                   # 2 secondes (vs 120s)
         condition3 = len(self.flows) > 20                # Éviter surcharge mémoire
-        condition4 = self.packets_count >= 10             # Flows avec assez de data
+        condition4 = len(flow.packets) >= 10             # Flows avec assez de data
         
         print(f"🗑️ GC conditions - packets%50: {condition1}, duration>2s: {condition2}, flows>20: {condition3}, packets>=10: {condition4}")
         
@@ -185,7 +185,7 @@ class FlowSession(DefaultSession):
                 condition1 = latest_time is None
                 condition2 = latest_time and (latest_time - flow.latest_timestamp) > 5  # 5 sec (vs 40s)
                 condition3 = flow.duration > 1                                          # 1 sec (vs 90s)
-                condition4 = self.packets_count >= 5                                     # Au moins 5 paquets
+                condition4 = len(flow.packets) >= 5                                     # Au moins 5 paquets
 
                 print(f"📊 GC Flow conditions - time_none: {condition1}, expired>5s: {condition2}, duration>1s: {condition3}, packets>=5: {condition4}")
                 
