@@ -24,8 +24,8 @@ class FlowSession(DefaultSession):
 
         if self.output_mode == 'flow':
             print(f"📝 Opening CSV file: {self.output_file}")
-            output = open(self.output_file, 'w')
-            self.csv_writer = csv.writer(output)
+            self.csv_file = open(self.output_file, 'w')
+            self.csv_writer = csv.writer(self.csv_file)
             print(f"✅ CSV writer created successfully")
 
         self.packets_count = 0
@@ -135,6 +135,15 @@ class FlowSession(DefaultSession):
                     print(f"📝 Writing CSV row {self.csv_line + 1}")
                     self.csv_writer.writerow(data.values())
                     self.csv_line += 1
+                    
+                    # 🔧 FORCER l'écriture sur disque
+                    import sys
+                    sys.stdout.flush()
+                    if hasattr(self, 'csv_file'):
+                        self.csv_file.flush()
+                        import os
+                        os.fsync(self.csv_file.fileno())
+                    
                     print(f"🗑️ Flow deleted from memory")
                     del self.flows[k]
                 else:
