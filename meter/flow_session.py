@@ -20,9 +20,13 @@ class FlowSession(DefaultSession):
         self.flows = {}
         self.csv_line = 0
 
+        print(f"🔧 FlowSession init - output_mode: {self.output_mode}, output_file: {self.output_file}")
+
         if self.output_mode == 'flow':
+            print(f"📝 Opening CSV file: {self.output_file}")
             output = open(self.output_file, 'w')
             self.csv_writer = csv.writer(output)
+            print(f"✅ CSV writer created successfully")
 
         self.packets_count = 0
 
@@ -109,19 +113,32 @@ class FlowSession(DefaultSession):
 
     def garbage_collect(self, latest_time) -> None:
         # TODO: Garbage Collection / Feature Extraction should have a separate thread
-        print('Garbage Collection Began. Flows = {}'.format(len(self.flows)))
+        print('🗑️ Garbage Collection Began. Flows = {}'.format(len(self.flows)))
         keys = list(self.flows.keys())
         for k in keys:
             flow = self.flows.get(k)
+            print(f"🔍 Processing flow {len(keys)-len(keys)+list(keys).index(k)+1}/{len(keys)}: duration={flow.duration}s, latest_timestamp_diff={(latest_time - flow.latest_timestamp) if latest_time else 'None'}")
 
             if self.output_mode == 'flow':
-                if latest_time is None or latest_time - flow.latest_timestamp > EXPIRED_UPDATE or flow.duration > 20:
+                condition1 = latest_time is None
+                condition2 = latest_time and (latest_time - flow.latest_timestamp) > EXPIRED_UPDATE  
+                condition3 = flow.duration > 20
+                
+                print(f"📊 GC Flow conditions - time_none: {condition1}, expired>{EXPIRED_UPDATE}s: {condition2}, duration>20s: {condition3}")
+                
+                if condition1 or condition2 or condition3:
+                    print("✅ Writing flow to CSV...")
                     data = flow.get_data()
                     if self.csv_line == 0:
+                        print(f"📝 Writing CSV header")
                         self.csv_writer.writerow(data.keys())
+                    print(f"📝 Writing CSV row {self.csv_line + 1}")
                     self.csv_writer.writerow(data.values())
                     self.csv_line += 1
+                    print(f"🗑️ Flow deleted from memory")
                     del self.flows[k]
+                else:
+                    print(f"⏳ Flow not ready for writing - keeping in memory")
             else:
                 if latest_time is None or latest_time - flow.latest_timestamp > EXPIRED_UPDATE:
                     output_dir = os.path.join(self.output_file, 'doh' if flow.is_doh() else 'ndoh')
@@ -130,7 +147,7 @@ class FlowSession(DefaultSession):
                     flow_clumps = proc.create_flow_clumps_container()
                     flow_clumps.to_json_file(output_dir)
                     del self.flows[k]
-        print('Garbage Collection Finished. Flows = {}'.format(len(self.flows)))
+        print('✅ Garbage Collection Finished. Flows remaining = {}, Written = {}'.format(len(self.flows), self.csv_line))
 
 
 def generate_session_class(output_mode, output_file):
