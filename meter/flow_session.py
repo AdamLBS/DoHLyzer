@@ -10,7 +10,7 @@ from meter.features.context.packet_flow_key import get_packet_flow_key
 from meter.flow import Flow
 from meter.time_series.processor import Processor
 
-EXPIRED_UPDATE = 40
+EXPIRED_UPDATE = 20
 
 
 class FlowSession(DefaultSession):
@@ -122,7 +122,7 @@ class FlowSession(DefaultSession):
             if self.output_mode == 'flow':
                 condition1 = latest_time is None
                 condition2 = latest_time and (latest_time - flow.latest_timestamp) > EXPIRED_UPDATE  
-                condition3 = flow.duration > 20
+                condition3 = flow.duration > 10
                 
                 print(f"📊 GC Flow conditions - time_none: {condition1}, expired>{EXPIRED_UPDATE}s: {condition2}, duration>20s: {condition3}")
                 
