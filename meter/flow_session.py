@@ -133,6 +133,11 @@ class FlowSession(DefaultSession):
                         self.csv_writer.writerow(data.keys())
                     print(f"📝 Writing CSV row {self.csv_line + 1}")
                     self.csv_writer.writerow(data.values())
+                    # Check if the CSV file is open if not create it
+                    if not hasattr(self, 'csv_file'):
+                        self.csv_file = open(self.output_file, 'w', newline='')
+                        self.csv_writer = csv.writer(self.csv_file)
+                        print(f"CSV File not found, created new one: {self.output_file}")
                     self.csv_line += 1
                     
                     # 🔧 FORCER l'écriture sur disque
