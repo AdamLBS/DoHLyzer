@@ -10,7 +10,7 @@ from meter.features.context.packet_flow_key import get_packet_flow_key
 from meter.flow import Flow
 from meter.time_series.processor import Processor
 
-EXPIRED_UPDATE = 20
+EXPIRED_UPDATE = 10
 
 
 class FlowSession(DefaultSession):
@@ -104,7 +104,7 @@ class FlowSession(DefaultSession):
 
         flow.add_packet(packet, direction)
 
-        if self.packets_count >= 4000 or (flow.duration > 120 and self.output_mode == 'flow'):
+        if self.packets_count >= 500 or (flow.duration > 60 and self.output_mode == 'flow'):
             print('Packet count: {}'.format(self.packets_count))
             self.garbage_collect(packet.time)
 
@@ -122,11 +122,10 @@ class FlowSession(DefaultSession):
             if self.output_mode == 'flow':
                 condition1 = latest_time is None
                 condition2 = latest_time and (latest_time - flow.latest_timestamp) > EXPIRED_UPDATE  
-                condition3 = flow.duration > 10
                 
-                print(f"📊 GC Flow conditions - time_none: {condition1}, expired>{EXPIRED_UPDATE}s: {condition2}, duration>20s: {condition3}")
+                print(f"📊 GC Flow conditions - time_none: {condition1}, expired>{EXPIRED_UPDATE}s: {condition2} ${latest_time - flow.latest_timestamp}s")
                 
-                if condition1 or condition2 or condition3:
+                if condition1 or condition2:
                     print("✅ Writing flow to CSV...")
                     data = flow.get_data()
                     if self.csv_line == 0:
