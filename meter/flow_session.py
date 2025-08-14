@@ -11,6 +11,8 @@ from meter.flow import Flow
 from meter.time_series.processor import Processor
 import time
 import threading
+from threading import RLock
+_csv_global_lock = RLock()
 
 EXPIRED_UPDATE = 20
 GC_INTERVAL_SECS = 5
@@ -27,22 +29,16 @@ class FlowSession(DefaultSession):
         if self.output_mode == 'flow':
             print(f"📝 Opening CSV file: {self.output_file}")
 
-            # Résoudre et préparer le chemin AVANT d'ouvrir
             abs_path = os.path.abspath(self.output_file)
             csv_dir = os.path.dirname(abs_path) or "."
             os.makedirs(csv_dir, exist_ok=True)
             print(f"🔗 CSV absolute path (inside container): {abs_path}")
 
-            # 'a' pour éviter le truncate ; header si fichier vide
-            file_exists = os.path.exists(abs_path)
-            self.csv_file = open(abs_path, 'a', newline='', encoding='utf-8')
-            self.csv_writer = csv.writer(self.csv_file)
-            self._csv_needs_header = (not file_exists) or (os.path.getsize(abs_path) == 0)
-            print("✅ CSV writer created successfully")
-
-            # Toujours fermer proprement à la fin du process
-            import atexit
-            atexit.register(self.close)
+            self._csv_path = abs_path
+            # Header requis si fichier inexistant ou vide au démarrage
+            self._csv_needs_header = (not os.path.exists(abs_path)) or (os.path.getsize(abs_path) == 0)
+            self._csv_global_lock = _csv_global_lock
+            print("✅ CSV path registered; will open on each write")
 
         self.packets_count = 0
 
@@ -52,6 +48,36 @@ class FlowSession(DefaultSession):
         self._gc_thread = threading.Thread(target=self._gc_loop, name="FlowSession-GC", daemon=True)
         self._gc_thread.start()
         super(FlowSession, self).__init__(*args, **kwargs)
+
+
+def _write_csv_row(self, data: dict):
+    """Rouvre le CSV, écrit (header si nécessaire) puis flush+fsync, de façon thread-safe (process)."""
+    with self._csv_global_lock:
+        # (Re)détection header en fonction de la taille réelle du fichier
+        needs_header = self._csv_needs_header
+        try:
+            needs_header = needs_header or (os.path.getsize(self._csv_path) == 0)
+        except FileNotFoundError:
+            needs_header = True
+
+        # Ouverture à chaque écriture
+        with open(self._csv_path, 'a', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            if needs_header:
+                print("📝 Writing CSV header")
+                writer.writerow(list(data.keys()))
+                self._csv_needs_header = False
+
+            print(f"📝 Writing CSV row {self.csv_line + 1}")
+            writer.writerow(list(data.values()))
+            f.flush()
+            os.fsync(f.fileno())
+            try:
+                size = os.path.getsize(self._csv_path)
+                print(f"💾 CSV flushed. Size now = {size} bytes @ {self._csv_path}")
+            except Exception:
+                pass
+
 
     def _gc_loop(self):
         """
@@ -188,28 +214,11 @@ class FlowSession(DefaultSession):
 
                     if condition1 or condition2 or condition3:
                         data = flow.get_data()
-
-                        if self._csv_needs_header:
-                            print("📝 Writing CSV header")
-                            self.csv_writer.writerow(list(data.keys()))
-                            self._csv_needs_header = False
-
-                        print(f"📝 Writing CSV row {self.csv_line + 1}")
-                        self.csv_writer.writerow(list(data.values()))
+                        # (remplacer tout ce qui écrit dans le CSV) par :
+                        self._write_csv_row(data)
                         self.csv_line += 1
-
-                        try:
-                            self.csv_file.flush()
-                            os.fsync(self.csv_file.fileno())
-                            size = os.path.getsize(self.csv_file.name)
-                            print(f"💾 CSV flushed. Size now = {size} bytes @ {self.csv_file.name}")
-                        except Exception as e:
-                            import traceback
-                            print(f"💥 CSV write error: {e}\n{traceback.format_exc()}")
-
                         print("🗑️ Flow deleted from memory")
                         del self.flows[k]
-
                     else:
                         print(f"⏳ Flow not ready for writing - keeping in memory")
                 else:
