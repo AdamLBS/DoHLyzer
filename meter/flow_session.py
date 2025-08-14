@@ -1,6 +1,9 @@
 import csv
 import os
+import time
+import threading
 from collections import defaultdict
+from threading import RLock
 
 from scapy.layers.tls.record import TLS, TLSApplicationData
 from scapy.sessions import DefaultSession
@@ -9,13 +12,11 @@ from meter.features.context.packet_direction import PacketDirection
 from meter.features.context.packet_flow_key import get_packet_flow_key
 from meter.flow import Flow
 from meter.time_series.processor import Processor
-import time
-import threading
-from threading import RLock
-_csv_global_lock = RLock()
 
 EXPIRED_UPDATE = 20
 GC_INTERVAL_SECS = 5
+_csv_global_lock = RLock()
+
 
 class FlowSession(DefaultSession):
     """Creates a list of network flows."""
@@ -49,18 +50,17 @@ class FlowSession(DefaultSession):
         self._gc_thread.start()
         super(FlowSession, self).__init__(*args, **kwargs)
 
-
+    # ---------- NEW: open-on-each-write helper ----------
     def _write_csv_row(self, data: dict):
         """Rouvre le CSV, écrit (header si nécessaire) puis flush+fsync, de façon thread-safe (process)."""
         with self._csv_global_lock:
-            # (Re)détection header en fonction de la taille réelle du fichier
-            needs_header = self._csv_needs_header
+            # (Re)détection header selon la taille réelle du fichier
+            needs_header = getattr(self, "_csv_needs_header", True)
             try:
                 needs_header = needs_header or (os.path.getsize(self._csv_path) == 0)
             except FileNotFoundError:
                 needs_header = True
 
-            # Ouverture à chaque écriture
             with open(self._csv_path, 'a', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 if needs_header:
@@ -78,19 +78,14 @@ class FlowSession(DefaultSession):
                 except Exception:
                     pass
 
-
+    # ---------- GC thread loop ----------
     def _gc_loop(self):
-        """
-        Boucle de GC périodique: s'exécute même sans trafic.
-        Appelle garbage_collect avec un latest_time basé sur time.time().
-        """
+        """Boucle de GC périodique: s'exécute même sans trafic."""
         while self._gc_thread_running:
             try:
                 self.garbage_collect(time.time())
             except Exception as e:
                 print(f"⚠️ Periodic GC error: {e}")
-
-            # Attendre avant le prochain passage
             time.sleep(GC_INTERVAL_SECS)
 
     def toPacketList(self):
@@ -101,7 +96,6 @@ class FlowSession(DefaultSession):
             except Exception:
                 pass
         # Sniffer finished all the packets it needed to sniff.
-        # It is not a good place for this, we need to somehow define a finish signal for AsyncSniffer
         self.garbage_collect(None)
         self.close()
         return super(FlowSession, self).toPacketList()
@@ -114,14 +108,7 @@ class FlowSession(DefaultSession):
                 self._gc_thread.join(timeout=2.0)
             except Exception:
                 pass
-        try:
-            with getattr(self, "_gc_lock", threading.Lock()):
-                if hasattr(self, 'csv_file') and self.csv_file and not self.csv_file.closed:
-                    self.csv_file.flush()
-                    os.fsync(self.csv_file.fileno())
-                    self.csv_file.close()
-        except Exception as e:
-            print(f"⚠️ Error while closing CSV file: {e}")
+        # plus de handle CSV persistant à fermer -> rien d'autre à faire
 
     def on_packet_received(self, packet):
         count = 0
@@ -130,43 +117,33 @@ class FlowSession(DefaultSession):
         if self.output_mode != 'flow':
             if TLS not in packet:
                 return
-
             if TLSApplicationData not in packet:
                 return
-
             if len(packet[TLSApplicationData]) < 40:
-                # PING frame (len = 34) or other useless frames
                 return
 
         self.packets_count += 1
 
-        # Creates a key variable to check
         packet_flow_key = get_packet_flow_key(packet, direction)
         flow = self.flows.get((packet_flow_key, count))
 
-        # If there is no forward flow with a count of 0
         if flow is None:
-            # There might be one of it in reverse
             direction = PacketDirection.REVERSE
             packet_flow_key = get_packet_flow_key(packet, direction)
             flow = self.flows.get((packet_flow_key, count))
 
             if flow is None:
-                # If no flow exists create a new flow
                 direction = PacketDirection.FORWARD
                 flow = Flow(packet, direction)
                 packet_flow_key = get_packet_flow_key(packet, direction)
                 self.flows[(packet_flow_key, count)] = flow
 
             elif (packet.time - flow.latest_timestamp) > EXPIRED_UPDATE:
-                # If the packet exists in the flow but the packet is sent
-                # after too much of a delay than it is a part of a new flow.
                 expired = EXPIRED_UPDATE
                 while (packet.time - flow.latest_timestamp) > expired:
                     count += 1
                     expired += EXPIRED_UPDATE
                     flow = self.flows.get((packet_flow_key, count))
-
                     if flow is None:
                         flow = Flow(packet, direction)
                         self.flows[(packet_flow_key, count)] = flow
@@ -175,11 +152,9 @@ class FlowSession(DefaultSession):
         elif (packet.time - flow.latest_timestamp) > EXPIRED_UPDATE:
             expired = EXPIRED_UPDATE
             while (packet.time - flow.latest_timestamp) > expired:
-
                 count += 1
                 expired += EXPIRED_UPDATE
                 flow = self.flows.get((packet_flow_key, count))
-
                 if flow is None:
                     flow = Flow(packet, direction)
                     self.flows[(packet_flow_key, count)] = flow
@@ -203,7 +178,7 @@ class FlowSession(DefaultSession):
                 if flow is None:
                     continue
                 print(f"🔍 Processing flow {idx}/{len(keys)}: duration={flow.duration}s, "
-                    f"latest_timestamp_diff={(latest_time - flow.latest_timestamp) if latest_time else 'None'}")
+                      f"latest_timestamp_diff={(latest_time - flow.latest_timestamp) if latest_time else 'None'}")
 
                 if self.output_mode == 'flow':
                     condition1 = latest_time is None
@@ -214,7 +189,6 @@ class FlowSession(DefaultSession):
 
                     if condition1 or condition2 or condition3:
                         data = flow.get_data()
-                        # (remplacer tout ce qui écrit dans le CSV) par :
                         self._write_csv_row(data)
                         self.csv_line += 1
                         print("🗑️ Flow deleted from memory")
