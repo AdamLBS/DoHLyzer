@@ -12,7 +12,7 @@ from meter.time_series.processor import Processor
 import time
 import threading
 
-EXPIRED_UPDATE = 40
+EXPIRED_UPDATE = 20
 GC_INTERVAL_SECS = 5
 
 class FlowSession(DefaultSession):
@@ -198,9 +198,14 @@ class FlowSession(DefaultSession):
                         self.csv_writer.writerow(list(data.values()))
                         self.csv_line += 1
 
-                        # Forcer l'écriture disque
-                        self.csv_file.flush()
-                        os.fsync(self.csv_file.fileno())
+                        try:
+                            self.csv_file.flush()
+                            os.fsync(self.csv_file.fileno())
+                            size = os.path.getsize(self.csv_file.name)
+                            print(f"💾 CSV flushed. Size now = {size} bytes @ {self.csv_file.name}")
+                        except Exception as e:
+                            import traceback
+                            print(f"💥 CSV write error: {e}\n{traceback.format_exc()}")
 
                         print("🗑️ Flow deleted from memory")
                         del self.flows[k]
