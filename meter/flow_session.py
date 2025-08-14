@@ -50,33 +50,33 @@ class FlowSession(DefaultSession):
         super(FlowSession, self).__init__(*args, **kwargs)
 
 
-def _write_csv_row(self, data: dict):
-    """Rouvre le CSV, écrit (header si nécessaire) puis flush+fsync, de façon thread-safe (process)."""
-    with self._csv_global_lock:
-        # (Re)détection header en fonction de la taille réelle du fichier
-        needs_header = self._csv_needs_header
-        try:
-            needs_header = needs_header or (os.path.getsize(self._csv_path) == 0)
-        except FileNotFoundError:
-            needs_header = True
-
-        # Ouverture à chaque écriture
-        with open(self._csv_path, 'a', newline='', encoding='utf-8') as f:
-            writer = csv.writer(f)
-            if needs_header:
-                print("📝 Writing CSV header")
-                writer.writerow(list(data.keys()))
-                self._csv_needs_header = False
-
-            print(f"📝 Writing CSV row {self.csv_line + 1}")
-            writer.writerow(list(data.values()))
-            f.flush()
-            os.fsync(f.fileno())
+    def _write_csv_row(self, data: dict):
+        """Rouvre le CSV, écrit (header si nécessaire) puis flush+fsync, de façon thread-safe (process)."""
+        with self._csv_global_lock:
+            # (Re)détection header en fonction de la taille réelle du fichier
+            needs_header = self._csv_needs_header
             try:
-                size = os.path.getsize(self._csv_path)
-                print(f"💾 CSV flushed. Size now = {size} bytes @ {self._csv_path}")
-            except Exception:
-                pass
+                needs_header = needs_header or (os.path.getsize(self._csv_path) == 0)
+            except FileNotFoundError:
+                needs_header = True
+
+            # Ouverture à chaque écriture
+            with open(self._csv_path, 'a', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                if needs_header:
+                    print("📝 Writing CSV header")
+                    writer.writerow(list(data.keys()))
+                    self._csv_needs_header = False
+
+                print(f"📝 Writing CSV row {self.csv_line + 1}")
+                writer.writerow(list(data.values()))
+                f.flush()
+                os.fsync(f.fileno())
+                try:
+                    size = os.path.getsize(self._csv_path)
+                    print(f"💾 CSV flushed. Size now = {size} bytes @ {self._csv_path}")
+                except Exception:
+                    pass
 
 
     def _gc_loop(self):
