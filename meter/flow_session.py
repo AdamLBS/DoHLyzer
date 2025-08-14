@@ -26,9 +26,23 @@ class FlowSession(DefaultSession):
 
         if self.output_mode == 'flow':
             print(f"📝 Opening CSV file: {self.output_file}")
-            self.csv_file = open(self.output_file, 'w')
+
+            # Résoudre et préparer le chemin AVANT d'ouvrir
+            abs_path = os.path.abspath(self.output_file)
+            csv_dir = os.path.dirname(abs_path) or "."
+            os.makedirs(csv_dir, exist_ok=True)
+            print(f"🔗 CSV absolute path (inside container): {abs_path}")
+
+            # 'a' pour éviter le truncate ; header si fichier vide
+            file_exists = os.path.exists(abs_path)
+            self.csv_file = open(abs_path, 'a', newline='', encoding='utf-8')
             self.csv_writer = csv.writer(self.csv_file)
-            print(f"✅ CSV writer created successfully")
+            self._csv_needs_header = (not file_exists) or (os.path.getsize(abs_path) == 0)
+            print("✅ CSV writer created successfully")
+
+            # Toujours fermer proprement à la fin du process
+            import atexit
+            atexit.register(self.close)
 
         self.packets_count = 0
 
@@ -75,10 +89,11 @@ class FlowSession(DefaultSession):
             except Exception:
                 pass
         try:
-            if hasattr(self, 'csv_file') and not self.csv_file.closed:
-                self.csv_file.flush()
-                os.fsync(self.csv_file.fileno())
-                self.csv_file.close()
+            with getattr(self, "_gc_lock", threading.Lock()):
+                if hasattr(self, 'csv_file') and self.csv_file and not self.csv_file.closed:
+                    self.csv_file.flush()
+                    os.fsync(self.csv_file.fileno())
+                    self.csv_file.close()
         except Exception as e:
             print(f"⚠️ Error while closing CSV file: {e}")
 
@@ -157,11 +172,12 @@ class FlowSession(DefaultSession):
         with self._gc_lock:
             print('🗑️ Garbage Collection Began. Flows = {}'.format(len(self.flows)))
             keys = list(self.flows.keys())
-            for k in keys:
+            for idx, k in enumerate(keys, start=1):
                 flow = self.flows.get(k)
                 if flow is None:
                     continue
-                print(f"🔍 Processing flow {len(keys)-len(keys)+list(keys).index(k)+1}/{len(keys)}: duration={flow.duration}s, latest_timestamp_diff={(latest_time - flow.latest_timestamp) if latest_time else 'None'}")
+                print(f"🔍 Processing flow {idx}/{len(keys)}: duration={flow.duration}s, "
+                    f"latest_timestamp_diff={(latest_time - flow.latest_timestamp) if latest_time else 'None'}")
 
                 if self.output_mode == 'flow':
                     condition1 = latest_time is None
@@ -171,22 +187,24 @@ class FlowSession(DefaultSession):
                     print(f"📊 GC Flow conditions - time_none: {condition1}, expired>{EXPIRED_UPDATE}s: {condition2}, duration>20s: {condition3}")
 
                     if condition1 or condition2 or condition3:
-                        print("✅ Writing flow to CSV...")
                         data = flow.get_data()
-                        if self.csv_line == 0:
-                            print(f"📝 Writing CSV header")
-                            self.csv_writer.writerow(data.keys())
+
+                        if self._csv_needs_header:
+                            print("📝 Writing CSV header")
+                            self.csv_writer.writerow(list(data.keys()))
+                            self._csv_needs_header = False
+
                         print(f"📝 Writing CSV row {self.csv_line + 1}")
-                        self.csv_writer.writerow(data.values())
+                        self.csv_writer.writerow(list(data.values()))
                         self.csv_line += 1
 
-                        # Forcer l'écriture
-                        if hasattr(self, 'csv_file'):
-                            self.csv_file.flush()
-                            os.fsync(self.csv_file.fileno())
+                        # Forcer l'écriture disque
+                        self.csv_file.flush()
+                        os.fsync(self.csv_file.fileno())
 
-                        print(f"🗑️ Flow deleted from memory")
+                        print("🗑️ Flow deleted from memory")
                         del self.flows[k]
+
                     else:
                         print(f"⏳ Flow not ready for writing - keeping in memory")
                 else:
